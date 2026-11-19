@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Mainuan</vendor>
+  <vendor_url>https://mainuan.local</vendor_url>
+  <action id="org.mainuan.otimizador.helper">
+    <description>Alterar a configuração de memória e do sistema</description>
+    <description xml:lang="en">Change memory and system configuration</description>
+    <description xml:lang="es">Cambiar la configuración de memoria y del sistema</description>
+    <description xml:lang="fr">Modifier la configuration de la mémoire et du système</description>
+    <description xml:lang="pt_BR">Alterar a configuração de memória e do sistema</description>
+    <message>É necessária autenticação para o MAINUAN OTIMIZADOR alterar a configuração do sistema</message>
+    <message xml:lang="en">Authentication is required for MAINUAN OTIMIZADOR to change the system configuration</message>
+    <message xml:lang="es">Se requiere autenticación para que MAINUAN OTIMIZADOR cambie la configuración del sistema</message>
+    <message xml:lang="fr">Une authentification est requise pour que MAINUAN OTIMIZADOR modifie la configuration du système</message>
+    <message xml:lang="pt_BR">É necessária autenticação para o MAINUAN OTIMIZADOR alterar a configuração do sistema</message>
+    <icon_name>mainuan-otimizador</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/mainuan-otimizador/helper.py</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

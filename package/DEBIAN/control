@@ -1,0 +1,13 @@
+Package: mainuan-otimizador
+Version: 1.1.2
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.10), python3-pyside6.qtcore | python3-pyqt5, python3-pyside6.qtgui | python3-pyqt5, python3-pyside6.qtwidgets | python3-pyqt5, pkexec | policykit-1, util-linux, systemd
+Recommends: wmctrl, fonts-lato
+Maintainer: David Caixinha <noreply@mainuan.local>
+Description: MAINUAN OTIMIZADOR - swap, zram, zswap e otimização do sistema
+ Gere swap, zram e zswap com um modo automático que deteta a RAM e o tipo de
+ armazenamento e aplica a configuração ideal. Otimiza RAM, CPU e navegador,
+ mostra o consumo de CPU, memória, GPU e swap em tempo real e permite
+ desativar ou eliminar programas e serviços que iniciam com o sistema.

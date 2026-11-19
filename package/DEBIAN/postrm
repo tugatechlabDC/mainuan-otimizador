@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+if [ "$1" = "purge" ]; then
+    if [ -e /swapfile.mainuan ]; then
+        swapoff /swapfile.mainuan 2>/dev/null || true
+        rm -f /swapfile.mainuan
+    fi
+    rm -rf /etc/mainuan-otimizador
+fi
+if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
+exit 0

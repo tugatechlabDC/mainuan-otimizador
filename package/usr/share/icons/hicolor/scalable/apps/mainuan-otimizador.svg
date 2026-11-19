@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="600">
+      <stop offset="0" stop-color="#0CCFD9"/>
+      <stop offset="0.5" stop-color="#06ADB7"/>
+      <stop offset="1" stop-color="#018993"/>
+    </linearGradient>
+  </defs>
+  <circle cx="300" cy="300" r="300" fill="url(#g)"/>
+  <!-- anel de medidor: pista + progresso -->
+  <path d="M 119.7 480.3 A 255 255 0 1 1 480.3 480.3" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="26" stroke-linecap="round"/>
+  <path d="M 119.7 480.3 A 255 255 0 0 1 427.5 79.2" fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"/>
+  <!-- M do Mainuan -->
+  <g transform="translate(300 300) scale(0.56) translate(-315 -301)">
+    <path fill="#FFFFFF" d="M100 175 Q100 140 135 140 L268 140 Q293 140 310 158 L384 244 Q398 258 410 258 Q422 258 436 244 L472 196 Q490 172 512 176 Q530 180 530 205 L530 425 Q530 445 508 445 L430 445 L430 318 Q430 303 414 306 L303 398 Q290 408 276 398 L205 322 Q195 312 195 325 L195 440 Q195 462 173 462 L122 462 Q100 462 100 440 Z"/>
+    <path d="M100 205 L272 388" stroke="url(#g)" stroke-width="9" fill="none"/>
+  </g>
+</svg>

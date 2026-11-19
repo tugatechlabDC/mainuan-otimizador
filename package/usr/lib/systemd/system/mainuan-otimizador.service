@@ -1,0 +1,13 @@
+[Unit]
+Description=MAINUAN OTIMIZADOR - aplicar configuração de swap/zram/zswap
+ConditionPathExists=/etc/mainuan-otimizador/memory.json
+After=local-fs.target systemd-modules-load.service
+Before=swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/mainuan-otimizador/helper.py apply-saved
+
+[Install]
+WantedBy=multi-user.target

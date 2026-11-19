@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=MAINUAN OTIMIZADOR
+GenericName=Otimizador do sistema
+GenericName[en]=System optimizer
+GenericName[es]=Optimizador del sistema
+GenericName[fr]=Optimiseur système
+GenericName[pt_BR]=Otimizador do sistema
+Comment=Gestão de swap, zram e zswap; otimização de RAM, CPU e navegador
+Comment[en]=Swap, zram and zswap management; RAM, CPU and browser optimization
+Comment[es]=Gestión de swap, zram y zswap; optimización de RAM, CPU y navegador
+Comment[fr]=Gestion de swap, zram et zswap ; optimisation de la RAM, du CPU et du navigateur
+Comment[pt_BR]=Gerenciamento de swap, zram e zswap; otimização de RAM, CPU e navegador
+Exec=mainuan-otimizador
+Icon=mainuan-otimizador
+Terminal=false
+Categories=System;Settings;Monitor;
+Keywords=swap;zram;zswap;ram;cpu;otimizar;optimize;memória;arranque;startup;
+StartupWMClass=mainuan-otimizador
