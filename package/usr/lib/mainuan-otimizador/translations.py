@@ -347,3 +347,9 @@ T = {
 "Nada foi selecionado para otimizar.": ("Nothing was selected to optimize.", "No se seleccionó nada para optimizar.", "Rien n'a été sélectionné à optimiser.", None),
 "Não há processos com consumo de CPU elevado neste momento; o CPU já está equilibrado. Recomendamos reiniciar o sistema para aplicar totalmente os ajustes.": ("There are no processes using a lot of CPU right now; the CPU is already balanced. We recommend restarting the system to fully apply the changes.", "No hay procesos con alto consumo de CPU en este momento; la CPU ya está equilibrada. Recomendamos reiniciar el sistema para aplicar totalmente los ajustes.", "Aucun processus ne consomme beaucoup de CPU pour le moment ; le CPU est déjà équilibré. Nous recommandons de redémarrer le système pour appliquer pleinement les réglages.", None),
 }
+
+try:
+    from translations_sys import T as _T_SYS
+    T.update(_T_SYS)
+except ImportError:
+    pass

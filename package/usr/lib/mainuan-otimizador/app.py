@@ -6,9 +6,8 @@ import sys
 import json
 import time
 import glob
+import math
 import html
-import signal
-import collections
 from string import Template
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +18,8 @@ i18n.set_lang(i18n.detect_lang())  # idioma do sistema, detetado automaticamente
 
 import common as C  # noqa: E402
 import core  # noqa: E402
-import tweaks  # noqa: E402
+import sysmgr  # noqa: E402
+import syspages  # noqa: E402
 
 try:
     from PySide6 import QtCore, QtGui, QtWidgets
@@ -88,6 +88,20 @@ QScrollBar::handle:horizontal:hover { background: $ACCENT2; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
 QPushButton#nav[collapsed="true"] { padding: 11px 0px; text-align: center; }
 QMessageBox, QDialog { background: $BG; }
+QWidget#plain, QFrame#plain { background: transparent; }
+QLabel#cardtitle { color: $MUTED; font-size: 9pt; font-weight: bold; }
+QLabel#big { font-size: 20pt; font-weight: bold; }
+QPushButton#small { padding: 4px 12px; font-size: 9pt; }
+QPushButton#link { border: none; background: transparent; color: $ACCENT; padding: 0 2px; font-size: 9pt; }
+QPushButton#link:hover { text-decoration: underline; }
+QPushButton::menu-indicator { width: 0; }
+QProgressBar { background: $BORDER; border: none; border-radius: 3px; max-height: 6px; min-height: 6px; }
+QProgressBar::chunk { background: $ACCENT; border-radius: 3px; }
+QStatusBar { background: $PANEL; color: $MUTED; border-top: 1px solid $BORDER; }
+QSplitter::handle { background: transparent; width: 8px; }
+QMenu { background: $PANEL; color: $TEXT; border: 1px solid $BORDER; padding: 4px; }
+QMenu::item { padding: 6px 18px; border-radius: 4px; }
+QMenu::item:selected { background: $DEEP; color: white; }
 """).substitute(FONT=FONT, **T)
 
 
@@ -196,6 +210,46 @@ def draw_pixmap(kind, color, size=22):
     elif kind == "list":
         for y in (11, 22, 33):
             p.drawPoint(P(10, y)); p.drawLine(P(18, y), P(s - 8, y))
+    elif kind == "overview":
+        p.drawRoundedRect(R(6, 6, 14, 18), 3, 3)
+        p.drawRoundedRect(R(24, 6, 14, 10), 3, 3)
+        p.drawRoundedRect(R(24, 20, 14, 18), 3, 3)
+        p.drawRoundedRect(R(6, 28, 14, 10), 3, 3)
+    elif kind == "services":
+        p.drawEllipse(R(c - 11, c - 11, 22, 22))
+        p.drawEllipse(R(c - 4.5, c - 4.5, 9, 9))
+        for k in range(8):
+            a = math.radians(k * 45)
+            p.drawLine(P(c + 11 * math.cos(a), c + 11 * math.sin(a)), P(c + 17 * math.cos(a), c + 17 * math.sin(a)))
+    elif kind == "diagnosis":
+        p.drawRoundedRect(R(4, 8, s - 8, s - 18), 5, 5)
+        p.drawPolyline(QtGui.QPolygonF([P(9, 22), P(16, 22), P(19.5, 14), P(24.5, 30), P(28, 20), P(30.5, 22), P(35, 22)]))
+        p.drawLine(P(16, s - 6), P(s - 16, s - 6))
+    elif kind == "optimize":
+        body = QtGui.QPainterPath()
+        body.moveTo(c, 4)
+        body.quadTo(33, 11, 31, 28)
+        body.lineTo(13, 28)
+        body.quadTo(11, 11, c, 4)
+        body.closeSubpath()
+        p.drawPath(body)
+        p.drawEllipse(R(c - 4, 14, 8, 8))
+        p.drawPolyline(QtGui.QPolygonF([P(14, 22), P(7, 32), P(14, 31)]))
+        p.drawPolyline(QtGui.QPolygonF([P(30, 22), P(37, 32), P(30, 31)]))
+        p.drawLine(P(c, 33), P(c, 40))
+    elif kind == "boot":
+        p.drawEllipse(R(7, 10, s - 14, s - 14))
+        p.drawLine(P(c, 10), P(c, 5))
+        p.drawLine(P(17, 5), P(27, 5))
+        p.drawLine(P(c, 27), P(30, 19))
+        p.drawPoint(P(c, 27))
+    elif kind == "history":
+        p.drawArc(R(6, 6, s - 12, s - 12), 120 * 16, 300 * 16)
+        p.drawPolyline(QtGui.QPolygonF([P(7, 9), P(13.5, 8), P(14.5, 15)]))
+        p.drawPolyline(QtGui.QPolygonF([P(c, 13), P(c, c), P(29, 26)]))
+    elif kind == "refresh":
+        p.drawArc(R(8, 8, s - 16, s - 16), 40 * 16, 280 * 16)
+        p.drawPolyline(QtGui.QPolygonF([P(36, 22), P(32.5, 31), P(25, 27)]))
     else:  # info
         p.drawEllipse(R(6, 6, s - 12, s - 12))
         p.drawPoint(P(c, 15)); p.drawLine(P(c, 21), P(c, 31))
@@ -443,86 +497,6 @@ class LogView(QtWidgets.QTextBrowser):
         sb.setValue(sb.maximum())
 
 
-# =================================================================== Gauge
-class Gauge(QtWidgets.QWidget):
-    def __init__(self, title, alert=True):
-        super().__init__()
-        self.title, self.alert, self.value, self.sub = title, alert, None, ""
-        self.hist = collections.deque(maxlen=60)
-        self.setMinimumSize(190, 250)
-
-    def set_value(self, v, sub):
-        self.value, self.sub = v, sub
-        if v is not None:
-            self.hist.append(v)
-        self.update()
-
-    def _color(self):
-        v = self.value or 0
-        if self.alert and v >= 90:
-            return QtGui.QColor(T["DANGER"])
-        if self.alert and v >= 70:
-            return QtGui.QColor(T["WARN"])
-        return QtGui.QColor(T["ACCENT"])
-
-    def paintEvent(self, _e):
-        p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        R, P = QtCore.QRectF, QtCore.QPointF
-        r = R(self.rect()).adjusted(1, 1, -1, -1)
-        p.setPen(QtGui.QPen(QtGui.QColor(T["BORDER"]), 1))
-        p.setBrush(QtGui.QColor(T["CARD"]))
-        p.drawRoundedRect(r, 16, 16)
-        f = p.font()
-        f.setPointSize(10)
-        f.setBold(True)
-        p.setFont(f)
-        p.setPen(QtGui.QColor(T["MUTED"]))
-        p.drawText(R(r.left() + 16, r.top() + 10, r.width() - 32, 22), self.title.upper(),
-                   QtGui.QTextOption(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
-        side = max(60.0, min(r.width() - 44, r.height() - 125))
-        arc = R(r.center().x() - side / 2, r.top() + 40, side, side)
-        w = max(9.0, side * 0.09)
-        pen = QtGui.QPen(QtGui.QColor(T["BORDER"]), w)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        inner = arc.adjusted(w, w, -w, -w)
-        p.drawArc(inner, 225 * 16, -270 * 16)
-        if self.value is not None:
-            pen.setColor(self._color())
-            p.setPen(pen)
-            p.drawArc(inner, 225 * 16, int(-270 * 16 * min(100.0, self.value) / 100.0))
-        f.setPointSize(max(14, int(side / 7)))
-        p.setFont(f)
-        p.setPen(QtGui.QColor(T["TEXT"]))
-        txt = "N/D" if self.value is None else f"{self.value:.0f}%"
-        p.drawText(arc, txt, QtGui.QTextOption(Qt.AlignmentFlag.AlignCenter))
-        f.setPointSize(9)
-        f.setBold(False)
-        p.setFont(f)
-        p.setPen(QtGui.QColor(T["MUTED"]))
-        opt = QtGui.QTextOption(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        opt.setWrapMode(QtGui.QTextOption.WrapMode.WordWrap)
-        p.drawText(R(r.left() + 10, arc.bottom() + 2, r.width() - 20, 34), self.sub, opt)
-        h = R(r.left() + 14, r.bottom() - 44, r.width() - 28, 32)
-        if len(self.hist) > 1:
-            path = QtGui.QPainterPath()
-            for i, v in enumerate(self.hist):
-                pt = P(h.left() + h.width() * i / (self.hist.maxlen - 1),
-                       h.bottom() - h.height() * min(100.0, v) / 100.0)
-                if i == 0:
-                    path.moveTo(pt)
-                else:
-                    path.lineTo(pt)
-            lp = QtGui.QPen(self._color(), 2)
-            lp.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-            p.setPen(lp)
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawPath(path)
-        p.end()
-
-
 # ==================================================================== Tarefas
 class Task(QtCore.QThread):
     done = Signal(object, object)
@@ -537,132 +511,6 @@ class Task(QtCore.QThread):
         except Exception as ex:  # noqa: BLE001
             res = ex
         self.done.emit(self, res)
-
-
-# ================================================================ Diálogo lista
-class PickDialog(QtWidgets.QDialog):
-    """Lista de processos + ajustes opcionais (caixas, listas) + escolha de ação."""
-
-    def __init__(self, parent, title, intro, rows, headers, action_text, options=(), choices=(),
-                 revert_text=None, tall=False):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        fit_dialog(self, 880, 780 if options and len(options) > 3 else 560)
-        self.rows, self.mode = rows, "apply"
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.addWidget(label(intro, "muted", True))
-        self.table = make_table(["", _("Processo"), "PID"] + list(headers))
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
-        self.table.setRowCount(len(rows))
-        for i, r in enumerate(rows):
-            chk = QtWidgets.QTableWidgetItem()
-            chk.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
-            chk.setCheckState(Qt.CheckState.Checked if r.get("checked") else Qt.CheckState.Unchecked)
-            self.table.setItem(i, 0, chk)
-            self.table.setItem(i, 1, titem(r["name"]))
-            self.table.setItem(i, 2, titem(r["pid"]))
-            self.table.setItem(i, 3, titem(r["c1"]))
-            self.table.setItem(i, 4, titem(r["c2"]))
-            self.table.item(i, 1).setToolTip(r.get("cmd", ""))
-        self.table.setColumnWidth(0, 34)
-        self.table.setColumnWidth(1, 220)
-        self.table.setColumnWidth(2, 70)
-        self.table.setColumnWidth(3, 110)
-        self.table.setMinimumHeight(110)
-        if not tall:
-            self.table.setMaximumHeight(200)
-        if rows:
-            lay.addWidget(self.table, 1 if tall else 0)
-        else:
-            self.table.hide()
-            lay.addWidget(label(_("Não foram encontrados processos adequados."), "muted"))
-
-        self.radios = []
-        for i, c in enumerate(choices):
-            rb = QtWidgets.QRadioButton(c)
-            rb.setChecked(i == 0)
-            self.radios.append(rb)
-            lay.addWidget(rb)
-
-        self.opts = []  # (dict, checkbox, combo)
-        if options:
-            head = QtWidgets.QHBoxLayout()
-            head.addWidget(label(_("Ajustes adicionais"), "h2"))
-            head.addStretch(1)
-            b_all = QtWidgets.QPushButton(_("Marcar todos"))
-            b_none = QtWidgets.QPushButton(_("Desmarcar todos"))
-            b_all.clicked.connect(lambda: self._mark(True))
-            b_none.clicked.connect(lambda: self._mark(False))
-            head.addWidget(b_all)
-            head.addWidget(b_none)
-            lay.addLayout(head)
-            scroll = QtWidgets.QScrollArea()
-            scroll.setWidgetResizable(True)
-            inner = QtWidgets.QWidget()
-            il = QtWidgets.QVBoxLayout(inner)
-            il.setSpacing(2)
-            for o in options:
-                row = QtWidgets.QHBoxLayout()
-                cb = QtWidgets.QCheckBox(o["label"])
-                cb.setChecked(bool(o.get("default")) and o.get("enabled", True))
-                cb.setEnabled(o.get("enabled", True))
-                row.addWidget(cb, 1)
-                combo = None
-                if o.get("combo"):
-                    combo = QtWidgets.QComboBox()
-                    for val, txt in o["combo"]:
-                        combo.addItem(txt, val)
-                    combo.setEnabled(o.get("enabled", True))
-                    row.addWidget(combo)
-                il.addLayout(row)
-                d = label(o.get("desc", ""), "muted", True)
-                d.setContentsMargins(26, 0, 0, 8)
-                il.addWidget(d)
-                self.opts.append((o, cb, combo))
-            il.addStretch(1)
-            scroll.setWidget(inner)
-            lay.addWidget(scroll, 1)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addStretch(1)
-        cancel = QtWidgets.QPushButton(_("Cancelar"))
-        cancel.clicked.connect(self.reject)
-        row.addWidget(cancel)
-        if revert_text:
-            rv = QtWidgets.QPushButton(revert_text)
-            rv.clicked.connect(self._revert)
-            row.addWidget(rv)
-        ok = QtWidgets.QPushButton(action_text)
-        ok.setObjectName("primary")
-        ok.clicked.connect(self.accept)
-        row.addWidget(ok)
-        lay.addLayout(row)
-
-    def _mark(self, on):
-        for o, cb, _combo in self.opts:
-            if cb.isEnabled():
-                cb.setChecked(on)
-
-    def _revert(self):
-        self.mode = "revert"
-        self.accept()
-
-    def selected(self):
-        return [self.rows[i] for i in range(len(self.rows))
-                if self.table.item(i, 0).checkState() == Qt.CheckState.Checked]
-
-    def option_values(self):
-        res = []
-        for o, cb, combo in self.opts:
-            res.append({"id": o["id"], "checked": cb.isChecked(),
-                        "param": combo.currentData() if combo is not None else None})
-        return res
-
-    def choice(self):
-        for i, rb in enumerate(self.radios):
-            if rb.isChecked():
-                return i
-        return 0
 
 
 class InfoDialog(QtWidgets.QDialog):
@@ -746,51 +594,6 @@ class InfoDialog(QtWidgets.QDialog):
         b.setMinimumHeight(38)
         b.clicked.connect(self.accept)
         lay.addWidget(b, 0, Qt.AlignmentFlag.AlignHCenter)
-
-
-# =================================================================== Páginas
-class DashboardPage(QtWidgets.QWidget):
-    def __init__(self, win):
-        super().__init__()
-        self.win = win
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(24, 20, 24, 20)
-        lay.addWidget(label(_("Painel"), "h1"))
-        lay.addWidget(label(_("Consumo em tempo real do seu sistema."), "muted"))
-        grid = QtWidgets.QGridLayout()
-        grid.setSpacing(14)
-        self.g = {"cpu": Gauge(_("CPU")), "ram": Gauge(_("Memória")),
-                  "cache": Gauge(_("Cache"), alert=False), "swap": Gauge(_("Swap"))}
-        for i, k in enumerate(("cpu", "ram", "cache", "swap")):
-            grid.addWidget(self.g[k], 0, i)
-        lay.addLayout(grid, 1)
-        box = card()
-        bl = QtWidgets.QVBoxLayout(box)
-        self.info = label("", None, True)
-        bl.addWidget(self.info)
-        lay.addWidget(box)
-        row = QtWidgets.QHBoxLayout()
-        b1 = QtWidgets.QPushButton(_("Otimizar RAM"))
-        b2 = QtWidgets.QPushButton(_("Otimizar CPU"))
-        for b in (b1, b2):
-            b.setObjectName("primary")
-            row.addWidget(b)
-        row.addStretch(1)
-        b1.clicked.connect(lambda: (win.goto(2), win.p_opt.optimize_ram()))
-        b2.clicked.connect(lambda: (win.goto(2), win.p_opt.optimize_cpu()))
-        lay.addLayout(row)
-
-    def update_data(self, d):
-        for k in ("cpu", "ram", "cache", "swap"):
-            self.g[k].set_value(d[k], d[k + "_sub"])
-
-    def update_info(self):
-        hw = self.win.hw
-        sw = [f"{s['name']} ({C.fmt_mb(s['size_kb'] // 1024)})" for s in C.swaps()]
-        self.info.setText(
-            "<b>" + esc(_("Hardware detetado:")) + "</b> RAM " + esc(C.fmt_mb(hw["ram_mb"])) + " · "
-            + esc(_("{n} CPU(s)").format(n=hw["cpus"])) + " · " + esc(C.storage_label(hw))
-            + "<br><b>" + esc(_("Swap ativa:")) + "</b> " + (esc(", ".join(sw)) if sw else esc(_("nenhuma"))))
 
 
 class MemoryPage(QtWidgets.QWidget):
@@ -983,628 +786,6 @@ class MemoryPage(QtWidgets.QWidget):
                      "Recomendamos reiniciar o sistema para garantir que tudo fica ativo."))
 
 
-class OptimizePage(QtWidgets.QWidget):
-    WARN_MSG = property(lambda self: _("A operação terminou, mas alguns passos falharam ou foram cancelados. "
-                                        "Consulte o Registo para ver os detalhes."))
-
-    def __init__(self, win):
-        super().__init__()
-        self.win = win
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(24, 20, 24, 20)
-        lay.addWidget(label(_("Otimizar"), "h1"))
-        lay.addWidget(label(_("Reduza o consumo de RAM e CPU. Nada é fechado sem lhe mostrar primeiro a lista."),
-                            "muted", True))
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(14)
-        self.buttons, self.icons = [], []
-        for kind, title, desc, fn in (
-                ("ram", _("Otimizar RAM"),
-                 _("Fecha processos inativos que ocupam memória e aplica ajustes extra à sua escolha."),
-                 self.optimize_ram),
-                ("cpu", _("Otimizar CPU"),
-                 _("Baixa a prioridade (ou fecha) processos que consomem muito CPU."), self.optimize_cpu),
-                ("globe", _("Otimizar navegador"),
-                 _("Reduz o uso de memória e a atividade em segundo plano nos navegadores instalados."),
-                 self.optimize_browser)):
-            c = card()
-            cl = QtWidgets.QVBoxLayout(c)
-            cl.setContentsMargins(18, 20, 18, 18)
-            cl.setSpacing(10)
-            ic = QtWidgets.QLabel()
-            ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.icons.append((ic, kind))
-            cl.addWidget(ic)
-            t = label(title, "h2")
-            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            cl.addWidget(t)
-            d = label(desc, "muted", True)
-            d.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            cl.addWidget(d)
-            cl.addStretch(1)
-            b = QtWidgets.QPushButton(title)
-            b.setObjectName("primary")
-            b.clicked.connect(fn)
-            cl.addWidget(b)
-            self.buttons.append(b)
-            row.addWidget(c, 1)
-        lay.addLayout(row)
-        self.status = label("", "muted")
-        lay.addWidget(self.status)
-        lay.addWidget(label(_("Registo"), "h2"))
-        self.log = LogView()
-        lay.addWidget(self.log, 1)
-        self.on_theme()
-
-    def on_theme(self):
-        for ic, kind in self.icons:
-            ic.setPixmap(draw_pixmap(kind, T["ACCENT"], 52))
-        self.log.render()
-
-    def busy(self, on, text=""):
-        for b in self.buttons:
-            b.setEnabled(not on)
-        self.status.setText(text)
-
-    def say(self, msg, kind="info"):
-        self.log.add(msg, kind)
-
-    # ----- RAM
-    def optimize_ram(self):
-        self.busy(True, _("A analisar processos (3 segundos)…"))
-        self.win.run_task(self._analyse_ram, (), self._ram_ready)
-
-    @staticmethod
-    def _analyse_ram():
-        s = core.ProcSampler()
-        s.sample()
-        time.sleep(3)
-        procs = s.sample()
-        win = core.window_pids()
-        return {"cands": core.ram_candidates(procs, win), "win_ok": win is not None}
-
-    def _ram_ready(self, res):
-        self.busy(False)
-        if isinstance(res, Exception):
-            self.say(_("Erro:") + f" {res}", "err")
-            return
-        rows = [{"pid": p["pid"], "name": p["name"], "c1": f"{p['rss_kb'] // 1024} MiB",
-                 "c2": f"{p['cpu']:.1f}%", "cmd": p["cmd"], "checked": p["checked"]} for p in res["cands"]]
-        if res["win_ok"]:
-            intro = _("Processos seus, sem janela aberta, inativos e com muita RAM. "
-                      "Foram pré-selecionados; desmarque o que quiser manter.")
-        else:
-            intro = _("Não é possível saber que processos têm janela aberta (sessão Wayland ou sem 'wmctrl'). "
-                      "Por segurança nenhum está pré-selecionado: marque só o que sabe que não precisa. "
-                      "Trabalho não guardado nesses programas pode perder-se.")
-        tweaks.HW = self.win.hw
-        options = []
-        for t in tweaks.TWEAKS:
-            ok, reason = t.avail()
-            options.append({"id": t.id, "label": _(t.label), "desc": _(t.desc) if ok else _(reason),
-                            "default": t.default, "enabled": ok,
-                            "combo": [(v, _(l)) for v, l in t.combo] if t.combo else None})
-        dlg = PickDialog(self, _("Otimizar RAM"), intro, rows, (_("RAM"), _("CPU")), _("Aplicar"),
-                         options=options, revert_text=_("Reverter ajustes selecionados"))
-        if not dlg.exec():
-            return
-        opts = [(o["id"], o["param"]) for o in dlg.option_values() if o["checked"]]
-        if dlg.mode == "revert":
-            opts = [(i, p) for i, p in opts if tweaks.BY_ID[i].revert is not None]
-            if not opts:
-                notify(self, _("Nada selecionado"), _("Nada foi selecionado para otimizar."), ok=False)
-                return
-            self._ram_mode = "revert"
-            self.busy(True, _("A reverter ajustes…"))
-            self.win.run_task(self._do_ram, ([], opts, "revert"), self._ram_done)
-            return
-        sel = dlg.selected()
-        if not sel and not opts:
-            notify(self, _("Nada selecionado"), _("Nada foi selecionado para otimizar."), ok=False)
-            return
-        self._ram_mode = "apply"
-        self.busy(True, _("A otimizar a RAM…"))
-        self.win.run_task(self._do_ram, (sel, opts, "apply"), self._ram_done)
-
-    @staticmethod
-    def _do_ram(sel, opts, mode):
-        before = C.meminfo().get("MemAvailable", 0)
-        log = []
-        if sel:
-            log.append(("head", _("Fechar processos inativos")))
-        for p in sel:
-            if not core.same_process(p["pid"], p["name"]):
-                continue
-            try:
-                os.kill(p["pid"], signal.SIGTERM)
-                log.append(("cmd", f"$ kill -TERM {p['pid']}  ({p['name']})"))
-                log.append(("ok", _("Pedido de fecho enviado a {n} (PID {p})").format(n=p["name"], p=p["pid"])))
-            except OSError as e:
-                log.append(("err", _("Não foi possível fechar {n}: {e}").format(n=p["name"], e=e.strerror)))
-        if sel:
-            time.sleep(2.5)
-        if opts:
-            log += tweaks.run_selected(opts, mode)
-        after = C.meminfo().get("MemAvailable", 0)
-        return log, before, after
-
-    def _ram_done(self, res):
-        self.busy(False)
-        if isinstance(res, Exception):
-            self.say(_("Erro:") + f" {res}", "err")
-            return
-        log, before, after = res
-        self.log.add_many(log)
-        self.say(_("Memória disponível: {a} MiB → {b} MiB ({d:+d} MiB)").format(
-            a=before // 1024, b=after // 1024, d=(after - before) // 1024), "head")
-        self.win.refresh_hw()
-        if any(k == "err" for k, _t in log):
-            notify(self, _("Concluído com avisos"), self.WARN_MSG, ok=False)
-        elif getattr(self, "_ram_mode", "apply") == "revert":
-            notify(self, _("Ajustes revertidos"),
-                   _("Os ajustes selecionados foram revertidos. Recomendamos reiniciar o sistema."))
-        else:
-            notify(self, _("RAM otimizada"),
-                   _("A otimização da RAM foi concluída. Memória disponível: {a} MiB → {b} MiB. "
-                     "Recomendamos reiniciar o sistema.").format(a=before // 1024, b=after // 1024))
-
-    # ----- CPU
-    def optimize_cpu(self):
-        self.busy(True, _("A medir o consumo de CPU (3 segundos)…"))
-        self.win.run_task(self._analyse_cpu, (), self._cpu_ready)
-
-    @staticmethod
-    def _analyse_cpu():
-        s = core.ProcSampler()
-        s.sample()
-        time.sleep(3)
-        return core.cpu_candidates(s.sample())
-
-    def _cpu_ready(self, res):
-        self.busy(False)
-        if isinstance(res, Exception):
-            self.say(_("Erro:") + f" {res}", "err")
-            return
-        rows = [{"pid": p["pid"], "name": p["name"], "c1": f"{p['cpu']:.0f}%",
-                 "c2": f"{p['rss_kb'] // 1024} MiB", "cmd": p["cmd"], "checked": True} for p in res]
-        intro = _("Processos seus com consumo de CPU elevado. Baixar a prioridade não fecha nada: "
-                  "apenas dá preferência ao resto do sistema.")
-        has_gov = bool(glob.glob("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"))
-        opts = [{"id": "gov", "label": _("Ativar modo de poupança de CPU (governor powersave, pede palavra-passe)"),
-                 "desc": "", "default": False, "enabled": True}] if has_gov else []
-        dlg = PickDialog(self, _("Otimizar CPU"), intro, rows, (_("CPU"), _("RAM")), _("Aplicar"),
-                         options=opts, tall=True,
-                         choices=(_("Baixar a prioridade (recomendado)"), _("Fechar os processos")))
-        if not dlg.exec():
-            return
-        sel, close = dlg.selected(), dlg.choice() == 1
-        gov = bool(opts) and dlg.option_values()[0]["checked"]
-        if not sel and not gov:
-            if not rows:
-                self.say(_("Otimização de CPU concluída."), "head")
-                notify(self, _("CPU otimizado"),
-                       _("Não há processos com consumo de CPU elevado neste momento; o CPU já está equilibrado. "
-                         "Recomendamos reiniciar o sistema para aplicar totalmente os ajustes."))
-            else:
-                notify(self, _("Nada selecionado"), _("Nada foi selecionado para otimizar."), ok=False)
-            return
-        self.busy(True, _("A otimizar o CPU…"))
-        self.win.run_task(self._do_cpu, (sel, close, gov), self._cpu_done)
-
-    @staticmethod
-    def _do_cpu(sel, close, gov):
-        log = []
-        for p in sel:
-            if not core.same_process(p["pid"], p["name"]):
-                continue
-            if close:
-                try:
-                    os.kill(p["pid"], signal.SIGTERM)
-                    log.append(("ok", _("Pedido de fecho enviado a {n} (PID {p})").format(n=p["name"], p=p["pid"])))
-                except OSError as e:
-                    log.append(("err", _("Não foi possível fechar {n}: {e}").format(n=p["name"], e=e.strerror)))
-            else:
-                n = core.lower_priority(p["pid"])
-                log.append(("ok", _("Prioridade baixada: {n} (PID {p}, {t} threads)").format(
-                    n=p["name"], p=p["pid"], t=n)))
-        if gov:
-            rc, out = core.run_helper("governor", "powersave")
-            log.append(("ok" if rc == 0 else "err", out or _("Governor alterado.")))
-        return log
-
-    def _cpu_done(self, res):
-        self.busy(False)
-        if isinstance(res, Exception):
-            self.say(_("Erro:") + f" {res}", "err")
-            return
-        self.log.add_many(res)
-        self.say(_("Otimização de CPU concluída."), "head")
-        if any(k == "err" for k, _t in res):
-            notify(self, _("Concluído com avisos"), self.WARN_MSG, ok=False)
-        else:
-            notify(self, _("CPU otimizado"),
-                   _("A otimização do CPU foi concluída. Recomendamos reiniciar o sistema "
-                     "para aplicar totalmente os ajustes."))
-
-    # ----- Navegador
-    def optimize_browser(self):
-        BrowserDialog(self).exec()
-
-
-class BrowserDialog(QtWidgets.QDialog):
-    def __init__(self, page):
-        super().__init__(page)
-        self.page = page
-        self.setWindowTitle(_("Otimizar navegador"))
-        fit_dialog(self, 680, 560)
-        lay = QtWidgets.QVBoxLayout(self)
-        self.ff = core.firefox_profiles()
-        self.has_ch = bool(C.chromium_installed())
-        found = core.detect_browsers()
-        ram = core.browser_ram_kb()
-        lay.addWidget(label(_("Memória usada agora pelos navegadores: <b>{x}</b>").format(x=core.size_kb(ram)),
-                            None, True))
-        lay.addWidget(label(_("Navegadores instalados:"), "h2"))
-        if found:
-            txt = "<br>".join(("✔ " if ok else "✖ ") + esc(n) + ("" if ok else " — " + esc(_("sem suporte")))
-                              for n, ok in found)
-        else:
-            txt = esc(_("nenhum encontrado"))
-        lay.addWidget(label(txt, None, True))
-        self.cb_mem = QtWidgets.QCheckBox(_("Ativar a poupança de memória em todos os navegadores instalados"))
-        self.cb_mem.setChecked(True)
-        f = self.cb_mem.font()
-        f.setBold(True)
-        self.cb_mem.setFont(f)
-        lay.addWidget(self.cb_mem)
-        d = label(_("Aplicado automaticamente a todos: descarrega separadores inativos, limita processos e cache "
-                    "(Firefox) e ativa o «Modo de poupança de memória» (Chrome, Chromium, Brave, Edge)."),
-                  "muted", True)
-        d.setContentsMargins(26, 0, 0, 6)
-        lay.addWidget(d)
-        self.cb_gen = QtWidgets.QCheckBox(_("Reduzir atividade em segundo plano e telemetria"))
-        self.cb_gen.setChecked(True)
-        lay.addWidget(self.cb_gen)
-        d2 = label(_("Desliga pré-carregamento de páginas, execução em segundo plano e envio de estatísticas. "
-                     "O navegador pode mostrar «gerido pela sua organização»."), "muted", True)
-        d2.setContentsMargins(26, 0, 0, 6)
-        lay.addWidget(d2)
-        lay.addWidget(label(_("Feche e volte a abrir o navegador para as alterações terem efeito."), "muted", True))
-        self.log = LogView()
-        lay.addWidget(self.log, 1)
-        row = QtWidgets.QHBoxLayout()
-        row.addStretch(1)
-        self.b_rev = QtWidgets.QPushButton(_("Reverter"))
-        self.b_ok = QtWidgets.QPushButton(_("Aplicar"))
-        self.b_ok.setObjectName("primary")
-        b_close = QtWidgets.QPushButton(_("Fechar"))
-        self.b_rev.clicked.connect(lambda: self.go(False))
-        self.b_ok.clicked.connect(lambda: self.go(True))
-        b_close.clicked.connect(self.accept)
-        for b in (self.b_rev, self.b_ok, b_close):
-            row.addWidget(b)
-        lay.addLayout(row)
-
-    def go(self, apply):
-        parts = []
-        if self.cb_mem.isChecked():
-            parts.append("memory")
-        if self.cb_gen.isChecked():
-            parts.append("general")
-        if apply and not parts:
-            self.log.add(_("Selecione pelo menos uma opção."), "err")
-            return
-        self._apply = apply
-        self.b_ok.setEnabled(False)
-        self.b_rev.setEnabled(False)
-        self.page.win.run_task(self._do, (apply, parts, list(self.ff), self.has_ch), self._done)
-
-    @staticmethod
-    def _do(apply, parts, ff, has_ch):
-        log = []
-        for p in ff:
-            try:
-                if apply:
-                    core.firefox_apply(p, parts)
-                    log.append(("ok", _("Firefox otimizado: {p}").format(p=p)))
-                else:
-                    core.firefox_remove(p)
-                    log.append(("ok", _("Firefox revertido: {p}").format(p=p)))
-            except OSError as e:
-                log.append(("err", _("Erro:") + f" {p}: {e.strerror}"))
-        if (apply and has_ch) or (not apply and any(
-                os.path.exists(os.path.join(d, C.POLICY_FILE)) for _n, _b, ds in C.CHROMIUM_TARGETS for d in ds)):
-            log.append(("cmd", _("A pedir autorização para as políticas dos navegadores…")))
-            if apply:
-                rc, out = core.run_helper("browser-policy", "apply", ",".join(parts))
-            else:
-                rc, out = core.run_helper("browser-policy", "remove")
-            for line in (out or "").splitlines():
-                if line.strip() and line.strip() != "OK":
-                    log.append(("err" if line.strip().startswith(("!", "Erro", "Error")) else "info", line.strip()))
-            log.append(("ok" if rc == 0 else "err", _("Concluído.") if rc == 0 else _("Cancelado ou sem autorização.")))
-        elif not log:
-            log.append(("info", _("Nada para alterar.")))
-        return log
-
-    def _done(self, res):
-        self.b_ok.setEnabled(True)
-        self.b_rev.setEnabled(True)
-        if isinstance(res, Exception):
-            self.log.add(_("Erro:") + f" {res}", "err")
-        else:
-            self.log.add_many(res)
-            if getattr(self, "_apply", False):
-                if any(k == "err" for k, _t in res):
-                    notify(self, _("Concluído com avisos"), self.page.WARN_MSG, ok=False)
-                else:
-                    notify(self, _("Navegador otimizado"),
-                           _("A otimização do navegador foi concluída. Se o navegador estiver aberto, "
-                             "feche-o e abra-o novamente para aplicar as alterações."))
-
-
-class StartupPage(QtWidgets.QWidget):
-    def __init__(self, win):
-        super().__init__()
-        self.win = win
-        self.items = []
-        self.shown = []
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(24, 20, 24, 20)
-        lay.addWidget(label(_("Arranque do sistema"), "h1"))
-        lay.addWidget(label(_("Programas e serviços que iniciam sozinhos. Desative ou elimine o que não utiliza. "
-                              "Tudo o que desativar pode ser reativado."), "muted", True))
-        top = QtWidgets.QHBoxLayout()
-        self.flt = QtWidgets.QComboBox()
-        self.flt.addItems([_("Todos"), _("Aplicações da sessão"), _("Serviços do utilizador"),
-                           _("Serviços do sistema")])
-        self.cb_prot = QtWidgets.QCheckBox(_("Mostrar serviços essenciais (protegidos)"))
-        self.search = QtWidgets.QLineEdit()
-        self.search.setPlaceholderText(_("Pesquisar…"))
-        top.addWidget(self.flt)
-        top.addWidget(self.search, 1)
-        top.addWidget(self.cb_prot)
-        lay.addLayout(top)
-        self.table = make_table([_("Nome"), _("Tipo"), _("Estado"), _("Descrição / comando")])
-        self.table.setColumnWidth(0, 230)
-        self.table.setColumnWidth(1, 170)
-        self.table.setColumnWidth(2, 150)
-        lay.addWidget(self.table, 1)
-        row = QtWidgets.QHBoxLayout()
-        self.b_dis = QtWidgets.QPushButton(_("Desativar"))
-        self.b_dis.setObjectName("primary")
-        self.b_en = QtWidgets.QPushButton(_("Reativar"))
-        self.b_del = QtWidgets.QPushButton(_("Eliminar"))
-        self.b_del.setObjectName("danger")
-        b_ref = QtWidgets.QPushButton(_("Atualizar"))
-        for b in (self.b_dis, self.b_en, self.b_del):
-            row.addWidget(b)
-        row.addStretch(1)
-        row.addWidget(b_ref)
-        lay.addLayout(row)
-        self.msg = label("", "muted", True)
-        lay.addWidget(self.msg)
-        self.flt.currentIndexChanged.connect(self.fill)
-        self.cb_prot.toggled.connect(self.fill)
-        self.search.textChanged.connect(self.fill)
-        self.b_dis.clicked.connect(lambda: self.act("disable"))
-        self.b_en.clicked.connect(lambda: self.act("enable"))
-        self.b_del.clicked.connect(lambda: self.act("delete"))
-        b_ref.clicked.connect(self.reload)
-
-    def kind_name(self, k):
-        return {"xdg": _("Aplicação da sessão"), "usr": _("Serviço do utilizador"),
-                "sys": _("Serviço do sistema")}[k]
-
-    def reload(self):
-        self.msg.setText(_("A carregar…"))
-        self.win.run_task(core.list_startup, (), self._loaded)
-
-    def _loaded(self, res):
-        if isinstance(res, Exception):
-            self.msg.setText(_("Erro:") + f" {res}")
-            return
-        self.items = res
-        self.msg.setText("")
-        self.fill()
-
-    def fill(self, *_a):
-        want = ["", "xdg", "usr", "sys"][self.flt.currentIndex()]
-        q = self.search.text().lower().strip()
-        self.shown = [i for i in self.items
-                      if (not want or i["kind"] == want) and (self.cb_prot.isChecked() or not i["protected"])
-                      and (not q or q in (i["name"] + " " + i["desc"]).lower())]
-        self.table.setRowCount(len(self.shown))
-        for r, i in enumerate(self.shown):
-            self.table.setItem(r, 0, titem(i["name"] + ("  🔒" if i["protected"] else "")))
-            self.table.setItem(r, 1, titem(self.kind_name(i["kind"])))
-            st = titem(i["state"])
-            st.setForeground(QtGui.QColor(T["OK"] if i["enabled"] else T["MUTED"]))
-            self.table.setItem(r, 2, st)
-            self.table.setItem(r, 3, titem(i["desc"]))
-
-    def selection(self):
-        rows = sorted({ix.row() for ix in self.table.selectionModel().selectedRows()})
-        return [self.shown[r] for r in rows if r < len(self.shown)]
-
-    def act(self, what):
-        sel = self.selection()
-        if not sel:
-            self.msg.setText(_("Selecione primeiro uma ou mais linhas."))
-            return
-        sel = [i for i in sel if not i["protected"]]
-        if not sel:
-            self.msg.setText(_("Os serviços essenciais estão protegidos e não podem ser alterados."))
-            return
-        if what == "delete":
-            nomes = "\n".join("• " + i["name"] for i in sel[:12])
-            if not ask(self, _("Eliminar"),
-                       _("Eliminar do arranque?") + f"\n\n{nomes}\n\n"
-                       + _("Aplicações da sessão do utilizador são apagadas; serviços são desativados e "
-                           "mascarados (reversível com «Reativar»).")):
-                return
-        self.msg.setText(_("A aplicar…"))
-        self.win.run_task(self._do, (what, sel), self._done)
-
-    @staticmethod
-    def _do(what, sel):
-        msgs = []
-        state = core._load_state()
-        for i in sel:
-            k, u = i["kind"], i["id"]
-            try:
-                if k == "xdg":
-                    if what == "disable":
-                        core.xdg_disable(i)
-                    elif what == "enable":
-                        core.xdg_enable(i)
-                    else:
-                        msgs.append(core.xdg_delete(i))
-                elif k == "usr":
-                    rec = state.setdefault("usr", {})
-                    if what == "disable":
-                        C.run(["systemctl", "--user", "disable", "--now", u])
-                        rec[u] = "disabled"
-                    elif what == "enable":
-                        C.run(["systemctl", "--user", "unmask", u])
-                        C.run(["systemctl", "--user", "enable", "--now", u])
-                        rec.pop(u, None)
-                    else:
-                        rec[u] = core.user_unit_delete(u)
-                        if rec[u] == "eliminado":
-                            rec.pop(u)
-                else:
-                    rec = state.setdefault("sys", {})
-                    act = {"disable": "disable", "enable": "enable", "delete": "mask"}[what]
-                    rc, out = core.run_helper("service", act, u)
-                    if rc != 0:
-                        msgs.append(f"{u}: {out}")
-                        continue
-                    if what == "enable":
-                        rec.pop(u, None)
-                    else:
-                        rec[u] = "masked" if what == "delete" else "disabled"
-            except OSError as e:
-                msgs.append(f"{i['name']}: {e.strerror}")
-        core.save_state(state)
-        return msgs
-
-    def _done(self, res):
-        if isinstance(res, Exception):
-            self.msg.setText(_("Erro:") + f" {res}")
-        else:
-            self.msg.setText(" ".join(res) if res else _("Concluído."))
-        self.reload()
-
-
-class ProcessPage(QtWidgets.QWidget):
-    def __init__(self, win):
-        super().__init__()
-        self.win = win
-        self.sampler = core.ProcSampler()
-        self.procs = []
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(24, 20, 24, 20)
-        lay.addWidget(label(_("Processos em curso"), "h1"))
-        top = QtWidgets.QHBoxLayout()
-        self.search = QtWidgets.QLineEdit()
-        self.search.setPlaceholderText(_("Pesquisar por nome ou comando…"))
-        self.only_me = QtWidgets.QCheckBox(_("Só os meus"))
-        self.only_me.setChecked(True)
-        top.addWidget(self.search, 1)
-        top.addWidget(self.only_me)
-        lay.addLayout(top)
-        self.table = make_table([_("Nome"), "PID", _("Utilizador"), _("CPU %"), _("RAM (MiB)"), _("Comando")])
-        for c, w in enumerate((200, 70, 100, 80, 100)):
-            self.table.setColumnWidth(c, w)
-        self.table.setSortingEnabled(True)
-        lay.addWidget(self.table, 1)
-        row = QtWidgets.QHBoxLayout()
-        b1 = QtWidgets.QPushButton(_("Terminar"))
-        b1.setObjectName("primary")
-        b2 = QtWidgets.QPushButton(_("Forçar fecho"))
-        b2.setObjectName("danger")
-        b3 = QtWidgets.QPushButton(_("Baixar prioridade"))
-        for b in (b1, b3, b2):
-            row.addWidget(b)
-        row.addStretch(1)
-        lay.addLayout(row)
-        self.msg = label("", "muted", True)
-        lay.addWidget(self.msg)
-        b1.clicked.connect(lambda: self.kill("TERM"))
-        b2.clicked.connect(lambda: self.kill("KILL"))
-        b3.clicked.connect(self.renice)
-
-    def refresh(self):
-        self.procs = self.sampler.sample()
-        q = self.search.text().lower().strip()
-        me = os.getuid()
-        rows = [p for p in self.procs if (not self.only_me.isChecked() or p["uid"] == me)
-                and (not q or q in (p["name"] + " " + p["cmd"]).lower())]
-        keep = {ix.sibling(ix.row(), 1).data() for ix in self.table.selectionModel().selectedRows()}
-        hs = self.table.horizontalHeader()
-        sc, so = hs.sortIndicatorSection(), hs.sortIndicatorOrder()
-        self.table.setSortingEnabled(False)
-        self.table.setRowCount(len(rows))
-        for r, p in enumerate(rows):
-            self.table.setItem(r, 0, titem(p["name"]))
-            self.table.setItem(r, 1, titem("", p["pid"]))
-            self.table.setItem(r, 2, titem(core.uname(p["uid"])))
-            self.table.setItem(r, 3, titem("", round(p["cpu"], 1)))
-            self.table.setItem(r, 4, titem("", p["rss_kb"] // 1024))
-            self.table.setItem(r, 5, titem(p["cmd"][:200]))
-        self.table.setSortingEnabled(True)
-        self.table.sortItems(sc if sc >= 0 else 3, so if sc >= 0 else Qt.SortOrder.DescendingOrder)
-        if keep:
-            last = self.table.columnCount() - 1
-            for r in range(self.table.rowCount()):
-                if self.table.item(r, 1).data(Qt.ItemDataRole.DisplayRole) in keep:
-                    self.table.setRangeSelected(QtWidgets.QTableWidgetSelectionRange(r, 0, r, last), True)
-
-    def selected(self):
-        res = []
-        for ix in self.table.selectionModel().selectedRows():
-            pid = self.table.item(ix.row(), 1).data(Qt.ItemDataRole.DisplayRole)
-            name = self.table.item(ix.row(), 0).text()
-            res.append((int(pid), name))
-        return res
-
-    def kill(self, sig):
-        sel = self.selected()
-        if not sel:
-            self.msg.setText(_("Selecione um processo."))
-            return
-        bad = [n for _p, n in sel if C.is_protected_name(n)]
-        if bad:
-            self.msg.setText(_("Processo(s) essenciais protegidos:") + " " + ", ".join(bad))
-            return
-        txt = "\n".join(f"• {n} (PID {p})" for p, n in sel[:10])
-        head = _("Forçar o fecho de:") if sig == "KILL" else _("Terminar:")
-        if not ask(self, _("Confirmar"), f"{head}\n\n{txt}"):
-            return
-        msgs = []
-        for pid, name in sel:
-            try:
-                if not core.same_process(pid, name):
-                    continue
-                os.kill(pid, signal.SIGTERM if sig == "TERM" else signal.SIGKILL)
-            except PermissionError:
-                rc, out = core.run_helper("terminate", pid, sig)
-                if rc != 0:
-                    msgs.append(f"{name}: {out}")
-            except OSError as e:
-                msgs.append(f"{name}: {e.strerror}")
-        self.msg.setText(" ".join(msgs) if msgs else _("Pedido enviado."))
-
-    def renice(self):
-        n = 0
-        for pid, name in self.selected():
-            if core.same_process(pid, name):
-                n += core.lower_priority(pid)
-        self.msg.setText(_("Prioridade baixada ({n} threads).").format(n=n) if n else
-                         _("Só é possível baixar a prioridade dos seus próprios processos."))
-
-
 class AboutPage(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -1618,8 +799,8 @@ class AboutPage(QtWidgets.QWidget):
         t.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(t)
         for txt in (_("Versão {v}").format(v=C.VERSION), _("Autor: {a}").format(a=C.AUTHOR),
-                    _("Gestão de swap, zram e zswap, otimização de RAM, CPU e navegador,"),
-                    _("monitorização em tempo real e controlo do arranque do sistema.")):
+                    _("Gestão de swap, zram e zswap, serviços do sistema, diagnóstico,"),
+                    _("otimização e análise de arranque, com histórico de alterações.")):
             l = label(txt, "muted")
             l.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lay.addWidget(l)
@@ -1631,7 +812,6 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle(C.APP_NAME)
         self.dark = dark
-        self.monitor = core.Monitor()
         self.tasks = set()
         self.tick_n = 0
         self.hw = C.hardware()
@@ -1664,16 +844,29 @@ class MainWindow(QtWidgets.QMainWindow):
         sl.addLayout(head)
 
         self.stack = QtWidgets.QStackedWidget()
-        self.p_dash = DashboardPage(self)
+        syspages.bind(sys.modules[__name__])
+        self.p_over = syspages.OverviewPage(self)
+        self.p_svc = syspages.ServicesPage(self)
+        self.p_diag = syspages.DiagnosisPage(self)
+        self.p_opt = syspages.OptimizationPage(self)
         self.p_mem = MemoryPage(self)
-        self.p_opt = OptimizePage(self)
-        self.p_start = StartupPage(self)
-        self.p_proc = ProcessPage(self)
-        pages = [(_("Painel"), "gauge", self.p_dash, 560), (_("Memória"), "ram", self.p_mem, 800),
-                 (_("Otimizar"), "bolt", self.p_opt, 640), (_("Arranque"), "power", self.p_start, 540),
-                 (_("Processos"), "list", self.p_proc, 540), (_("Acerca"), "info", AboutPage(), 0)]
+        self.p_boot = syspages.BootPage(self)
+        self.p_hist = syspages.HistoryPage(self)
+        self.sys_pages = [self.p_over, self.p_svc, self.p_diag, self.p_opt, self.p_boot, self.p_hist]
+        pages = [("overview", _("Resumo"), "overview", self.p_over, 640),
+                 ("services", _("Serviços"), "services", self.p_svc, 540),
+                 ("diagnosis", _("Diagnóstico"), "diagnosis", self.p_diag, 480),
+                 ("optimization", _("Otimização"), "optimize", self.p_opt, 540),
+                 ("mem", _("Memória"), "ram", self.p_mem, 800),
+                 ("boot", _("Análise de arranque"), "boot", self.p_boot, 540),
+                 ("history", _("Histórico"), "history", self.p_hist, 420),
+                 ("about", _("Acerca"), "info", AboutPage(), 0)]
+        self.idx = {}
+        self.pages_by_index = []
         self.nav = []
-        for i, (txt, ic, page, min_h) in enumerate(pages):
+        for i, (key, txt, ic, page, min_h) in enumerate(pages):
+            self.idx[key] = i
+            self.pages_by_index.append(page)
             b = QtWidgets.QPushButton("  " + txt)
             b.setObjectName("nav")
             b.setProperty("kind", ic)
@@ -1684,7 +877,7 @@ class MainWindow(QtWidgets.QMainWindow):
             b.clicked.connect(lambda _c=False, n=i: self.goto(n))
             sl.addWidget(b)
             self.nav.append(b)
-            self.stack.addWidget(scroll_wrap(page, min_h))
+            self.stack.addWidget(scroll_wrap(page, min_h, 640 if key != "mem" else 700))
         sl.addStretch(1)
         self.ver = label(f"v{C.VERSION}", "muted")
         sl.addWidget(self.ver, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -1697,7 +890,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.timeout.connect(self.tick)
         self.timer.start(1000)
         self.goto(0)
-        self.p_dash.update_info()
         self.tick()
 
         self.initial_size()
@@ -1759,10 +951,8 @@ class MainWindow(QtWidgets.QMainWindow):
             b.setIcon(make_icon(b.property("kind")))
         self.b_toggle.setIcon(make_icon("menu"))
         self.p_mem.on_theme()
-        self.p_opt.on_theme()
-        self.p_start.fill()
-        for g in self.p_dash.g.values():
-            g.update()
+        for pg in self.sys_pages:
+            pg.on_theme()
 
     def check_theme(self):
         dark = detect_dark()
@@ -1774,17 +964,29 @@ class MainWindow(QtWidgets.QMainWindow):
     def goto(self, n):
         self.nav[n].setChecked(True)
         self.stack.setCurrentIndex(n)
-        if n == 3 and not self.p_start.items:
-            self.p_start.reload()
-        if n == 4:
-            self.p_proc.refresh()
-        if n == 1:
+        pg = self.pages_by_index[n]
+        if pg is self.p_mem:
             self.p_mem.refresh_ui()
             self.p_mem.refresh_status()
+        elif hasattr(pg, "activate"):
+            pg.activate()
+
+    def goto_name(self, key):
+        self.goto(self.idx[key])
+
+    def open_service(self, name, scope="system"):
+        """Abre a página Serviços com o serviço indicado selecionado."""
+        self.p_svc.pending = (scope, name)
+        self.p_svc.search.setText("")
+        self.goto_name("services")
+        self.p_svc.reload(True)
+
+    def invalidate(self, key):
+        """Marca uma página como desatualizada: volta a ler os dados quando for aberta."""
+        self.pages_by_index[self.idx[key]].loaded_at = 0
 
     def refresh_hw(self):
         self.hw = C.hardware()
-        self.p_dash.update_info()
         self.p_mem.refresh_ui()
 
     def run_task(self, fn, args, cb):
@@ -1802,16 +1004,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def tick(self):
         self.tick_n += 1
-        self.p_dash.update_data(self.monitor.snapshot())
         if self.tick_n % 3 == 0:
             self.check_theme()
-        i = self.stack.currentIndex()
-        if i == 0 and self.tick_n % 5 == 0:
-            self.p_dash.update_info()
-        elif i == 1 and self.tick_n % 3 == 0:
-            self.p_mem.refresh_status()
-        elif i == 4 and self.tick_n % 3 == 0:
-            self.p_proc.refresh()
+            if self.stack.currentIndex() == self.idx["mem"]:
+                self.p_mem.refresh_status()
+        if self.tick_n % 5 == 0 and self.stack.currentIndex() == self.idx["overview"]:
+            self.p_over.refresh_memory()
 
 
 def main():

@@ -9,7 +9,6 @@ import json
 import time
 import glob
 import shutil
-import signal
 import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,10 +17,6 @@ import i18n  # noqa: E402
 from i18n import _  # noqa: E402
 
 ZP = "/sys/module/zswap/parameters/"
-GROUPS = {
-    "bluetooth": ("bluetooth.service",),
-    "printing": ("cups.service", "cups.socket", "cups.path", "cups-browsed.service"),
-}
 
 
 def out(msg):
@@ -250,132 +245,85 @@ def cmd_restore():
 
 
 # ------------------------------------------------------------ otimização
-def cmd_drop_caches():
-    os.sync()
-    write("/proc/sys/vm/drop_caches", "3")
-    write("/proc/sys/vm/compact_memory", "1")
-    out("OK")
+SVC_UNIT_RE = r"[A-Za-z0-9@._:\\-]+\.(service|socket|timer|path|target|mount|swap)"
+SVC_ACTIONS = {
+    "start": [["start"]], "stop": [["stop"]], "restart": [["restart"]],
+    "enable": [["unmask"], ["enable"]], "disable": [["disable"]],
+    "enable-now": [["unmask"], ["enable", "--now"]], "disable-now": [["disable", "--now"]],
+}
 
 
-def cmd_governor(name):
-    if name not in ("powersave", "performance", "schedutil", "ondemand", "conservative"):
-        raise ValueError(_("governor inválido"))
-    n = 0
-    for d in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq"):
-        avail = C.read(d + "/scaling_available_governors").split()
-        if name in avail and write(d + "/scaling_governor", name):
-            n += 1
-    out(_("Governor '{g}' aplicado a {n} núcleo(s).").format(g=name, n=n))
-    if n == 0:
-        raise ValueError(_("este sistema não permite alterar o governor"))
+def _res(unit, action, ok, message=""):
+    print("@@RES " + json.dumps(dict(unit=unit, action=action, ok=ok, message=message), ensure_ascii=False), flush=True)
 
 
-def cmd_terminate(pid_s, sig):
-    pid = int(pid_s)
-    if pid <= 1 or pid == os.getpid():
-        raise ValueError(_("pid inválido"))
-    if sig not in ("TERM", "KILL"):
-        raise ValueError(_("sinal inválido"))
-    cmdline = open(f"/proc/{pid}/cmdline", "rb").read()
-    if not cmdline:
-        raise ValueError(_("processo do kernel"))
-    name = C.read(f"/proc/{pid}/comm")
-    if C.is_protected_name(name):
-        raise ValueError(_("'{n}' é um processo essencial").format(n=name))
-    os.kill(pid, signal.SIGTERM if sig == "TERM" else signal.SIGKILL)
-    out("OK")
+def _run_msg(cmd, env=None, timeout=1700):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+    msg = ((p.stderr or "") + (p.stdout or "")).strip().splitlines()
+    return p.returncode == 0, ("" if p.returncode == 0 else (msg[-1] if msg else _("falhou")))
 
 
-def cmd_service(action, unit):
-    if not re.fullmatch(r"[A-Za-z0-9@._:\-]+\.service", unit):
-        raise ValueError(_("nome de serviço inválido"))
-    if C.is_protected_unit(unit) and action in ("disable", "mask", "stop"):
-        raise ValueError(_("'{n}' é um serviço essencial").format(n=unit))
-    if action == "disable":
-        ok = sh(["systemctl", "disable", "--now", unit])
-    elif action == "mask":
-        sh(["systemctl", "disable", "--now", unit])
-        ok = sh(["systemctl", "mask", unit])
-    elif action == "enable":
-        sh(["systemctl", "unmask", unit])
-        ok = sh(["systemctl", "enable", "--now", unit])
-    else:
-        raise ValueError(_("ação inválida"))
-    if not ok:
-        raise ValueError(_("o systemctl falhou"))
-    out("OK")
-
-
-def cmd_group(group, action):
-    """Bluetooth / impressão: grupos de unidades pré-definidos (lista fixa)."""
-    if group not in GROUPS or action not in ("enable", "disable"):
-        raise ValueError(_("ação inválida"))
-    done = 0
-    for u in GROUPS[group]:
-        if not unit_exists(u):
-            continue
-        if action == "disable":
-            sh(["systemctl", "disable", "--now", u])
-        else:
-            sh(["systemctl", "enable", "--now", u])
-        done += 1
-    if done == 0:
-        raise ValueError(_("serviço não encontrado neste sistema"))
-    out(_("Serviços desativados.") if action == "disable" else _("Serviços ativados."))
-    out("OK")
-
-
-def cmd_trim(action):
-    if action == "enable":
-        if not unit_exists("fstrim.timer"):
-            raise ValueError(_("fstrim.timer não existe neste sistema"))
-        sh(["systemctl", "enable", "--now", "fstrim.timer"])
-        sh(["fstrim", "-av"])
-    elif action == "disable":
-        sh(["systemctl", "disable", "--now", "fstrim.timer"])
-    else:
-        raise ValueError(_("ação inválida"))
-    out("OK")
-
-
-def cmd_earlyoom(action):
-    if action == "enable":
-        if not shutil.which("earlyoom"):
-            env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
-            out(_("A instalar o EarlyOOM…"))
-            if not sh(["apt-get", "install", "-y", "earlyoom"], env=env):
-                raise ValueError(_("não foi possível instalar o EarlyOOM (apt ocupado ou sem rede)"))
-        sh(["systemctl", "enable", "--now", "earlyoom.service"])
-    elif action == "disable":
-        sh(["systemctl", "disable", "--now", "earlyoom.service"])
-    else:
-        raise ValueError(_("ação inválida"))
-    out("OK")
-
-
-def cmd_browser_policy(action, parts="memory,general"):
-    if action not in ("apply", "remove"):
-        raise ValueError(_("ação inválida"))
-    plist = [p for p in parts.split(",") if p in C.CHROMIUM_POLICY_PARTS]
-    if action == "apply" and not plist:
-        raise ValueError(_("ação inválida"))
-    found = C.chromium_installed()
-    if action == "apply" and not found:
-        out(_("Nenhum navegador baseado em Chromium encontrado."))
-    targets = found if action == "apply" else [(n, d) for n, _b, d in C.CHROMIUM_TARGETS]
-    for name, dirs in targets:
-        for d in dirs:
-            path = os.path.join(d, C.POLICY_FILE)
-            if action == "apply":
-                os.makedirs(d, exist_ok=True)
-                with open(path, "w") as f:
-                    json.dump(C.chromium_policy(plist), f, indent=2)
-                os.chmod(path, 0o644)
-                out(_("Política aplicada: {n}").format(n=name) + f" ({path})")
-            elif os.path.exists(path):
-                os.remove(path)
-                out(_("Política removida: {n}").format(n=name))
-    out("OK")
+def cmd_svc_batch(arg):
+    """Executa vários passos de serviços/pacotes numa só autenticação. Tudo validado; sem shell."""
+    import sysmgr
+    steps = json.loads(arg)
+    if not isinstance(steps, list) or len(steps) > 400:
+        raise ValueError(_("comando inválido"))
+    apt_env = dict(os.environ, DEBIAN_FRONTEND="noninteractive", LC_ALL="C")
+    for st in steps:
+        unit, act = str(st.get("unit", "")), str(st.get("action", ""))
+        try:
+            if act in SVC_ACTIONS:
+                if not re.fullmatch(SVC_UNIT_RE, unit):
+                    raise ValueError(_("nome de serviço inválido"))
+                if act in ("stop", "restart", "disable", "disable-now") and sysmgr.is_protected(unit):
+                    raise ValueError(_("'{n}' é um serviço essencial").format(n=unit))
+                ok, msg = True, ""
+                for c in SVC_ACTIONS[act]:
+                    if c == ["unmask"]:
+                        _run_msg(["systemctl", "unmask", unit])
+                        continue
+                    ok, msg = _run_msg(["systemctl"] + c + [unit])
+                    if not ok:
+                        break
+                _res(unit, act, ok, msg)
+            elif act in ("package-reinstall", "package-install"):
+                if not re.fullmatch(r"[a-z0-9][a-z0-9+.\-]*(:[a-z0-9]+)?", unit):
+                    raise ValueError(_("nome de pacote inválido"))
+                cmd = ["apt-get", "install", "-y"] + (["--reinstall"] if act == "package-reinstall" else []) + [unit]
+                ok, msg = _run_msg(cmd, apt_env)
+                _res(unit, act, ok, msg)
+            elif act == "dpkg-configure":
+                ok, msg = _run_msg(["dpkg", "--configure", "-a"], apt_env)
+                _res(unit, act, ok, msg)
+            elif act == "apt-fix-broken":
+                ok, msg = _run_msg(["apt-get", "-f", "install", "-y"], apt_env)
+                _res(unit, act, ok, msg)
+            elif act == "remove-link":
+                real = os.path.abspath(unit)
+                if (not real.startswith("/etc/systemd/system/") or not os.path.islink(real) or os.path.exists(real)
+                        or not (os.path.realpath(os.path.dirname(real)) + "/").startswith("/etc/systemd/system/")):
+                    raise ValueError(_("ligação inválida"))
+                os.remove(real)
+                _res(unit, act, True)
+            elif act == "add-journal-group":
+                uid = int(os.environ.get("PKEXEC_UID", "-1"))
+                import pwd
+                user = pwd.getpwuid(uid).pw_name if uid > 0 else ""
+                if not user:
+                    raise ValueError(_("utilizador desconhecido"))
+                grp = "systemd-journal" if os.path.exists("/usr/bin/journalctl") else "adm"
+                ok, msg = _run_msg(["usermod", "-aG", grp, user])
+                _res(unit, act, ok, msg)
+            else:
+                raise ValueError(_("ação inválida"))
+        except (ValueError, OSError, KeyError) as e:
+            _res(unit, act, False, str(e))
+    if any(s.get("action") in SVC_ACTIONS for s in steps):
+        _run_msg(["systemctl", "daemon-reload"])
 
 
 def main(argv):
@@ -397,22 +345,8 @@ def main(argv):
             cmd_apply_saved()
         elif c == "restore":
             cmd_restore()
-        elif c == "drop-caches":
-            cmd_drop_caches()
-        elif c == "governor" and len(a) == 1:
-            cmd_governor(a[0])
-        elif c == "terminate" and len(a) == 2:
-            cmd_terminate(a[0], a[1])
-        elif c == "service" and len(a) == 2:
-            cmd_service(a[0], a[1])
-        elif c == "group" and len(a) == 2:
-            cmd_group(a[0], a[1])
-        elif c == "trim" and len(a) == 1:
-            cmd_trim(a[0])
-        elif c == "earlyoom" and len(a) == 1:
-            cmd_earlyoom(a[0])
-        elif c == "browser-policy" and 1 <= len(a) <= 2:
-            cmd_browser_policy(*a)
+        elif c == "svc-batch" and len(a) == 1:
+            cmd_svc_batch(a[0])
         else:
             out(_("comando inválido"))
             return 2

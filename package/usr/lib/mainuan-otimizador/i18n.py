@@ -20,16 +20,40 @@ def _norm(code):
     return None
 
 
+def _base(code):
+    return code.split(".")[0].split("@")[0].replace("-", "_").partition("_")[0].lower()
+
+
+def _file_locale():
+    """Idioma configurado no sistema, quando o ambiente não o indica."""
+    for path in ("/etc/locale.conf", "/etc/default/locale"):
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("LANG="):
+                        v = line.split("=", 1)[1].strip().strip('"')
+                        if v and _base(v) not in ("c", "posix"):
+                            return v
+        except OSError:
+            pass
+    return ""
+
+
 def detect_lang(env=None):
+    """Idioma do sistema: pt-PT, pt-BR, es, fr ou en. Qualquer outro idioma -> en."""
     env = os.environ if env is None else env
+    found = ""
     for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
-        v = env.get(var, "")
-        for part in v.split(":"):
-            if part and part not in ("C", "POSIX"):
-                l = _norm(part)
-                if l:
-                    return l
-    return "en"
+        for part in env.get(var, "").split(":"):
+            part = part.strip()
+            if part and _base(part) not in ("c", "posix"):
+                found = part
+                break
+        if found:
+            break
+    if not found and env is os.environ:
+        found = _file_locale()
+    return _norm(found) or "en" if found else "en"
 
 
 def set_lang(lang):

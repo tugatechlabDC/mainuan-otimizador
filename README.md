@@ -8,71 +8,96 @@
 ![Licença](https://img.shields.io/badge/licença-GPL--3.0--or--later-blue)
 ![Plataforma](https://img.shields.io/badge/plataforma-Linux-lightgrey)
 
-Aplicação gráfica para gerir **swap, zram e zswap** e otimizar o sistema Linux. Tem um modo automático que deteta a RAM e o tipo de armazenamento (SSD ou HDD) e aplica a configuração ideal, e mostra o consumo de CPU, memória, cache e swap em tempo real.
+Aplicação para Linux (Ubuntu, Debian e derivados) que reúne num só sítio o estado do sistema, a gestão de serviços, o diagnóstico de erros, a otimização, a configuração de memória (swap, zram e zswap) e a análise do tempo de arranque.
 
 </div>
 
 ## Screenshots
 
 <div align="center">
-  <img src="assets/screenshots/screenshot1.png" width="32%" alt="Painel"/>
-  <img src="assets/screenshots/screenshot2.png" width="32%" alt="Memória: swap, zram e zswap"/>
-  <img src="assets/screenshots/screenshot3.png" width="32%" alt="Otimizar"/>
+  <img src="assets/screenshots/screenshot1.png" width="24%">
+  <img src="assets/screenshots/screenshot2.png" width="24%">
+  <img src="assets/screenshots/screenshot3.png" width="24%">
+  <img src="assets/screenshots/screenshot4.png" width="24%">
+  <img src="assets/screenshots/screenshot5.png" width="24%">
+  <img src="assets/screenshots/screenshot6.png" width="24%">
+  <img src="assets/screenshots/screenshot7.png" width="24%">
+  <img src="assets/screenshots/screenshot8.png" width="24%">
 </div>
+
+** 🆕 Nova Versão: 2.0** - 2026-11-26
 
 ## Funcionalidades
 
-- **Painel:** consumo em tempo real de CPU, memória, cache e swap, com o hardware detetado.
-- **Memória (swap, zram e zswap):** modo **automático** (recomendado) ou **manual**, com tipo, tamanho, compressão e prioridade configuráveis. Mostra o estado atual e os parâmetros do kernel.
-- **Otimizar RAM, CPU e navegador:** fecha processos inativos ou baixa-lhes a prioridade. Nada é fechado sem mostrar primeiro a lista.
-- **Arranque:** desativar ou eliminar programas e serviços que iniciam com o sistema.
-- **Processos:** lista de processos em execução.
-- **Multilingue:** português (PT), inglês, espanhol, francês e português (BR).
+| Menu | O que faz |
+|---|---|
+| **Resumo** | Vista rápida do sistema: serviços ativos, inativos e falhados, saúde geral, tempo de arranque, serviços que mais memória usam, atividade recente, dados do sistema e estado da memória. |
+| **Serviços** | Lista todos os serviços do systemd (sistema e utilizador), com pesquisa e filtros. Permite iniciar, parar, reiniciar e ativar ou desativar no arranque, e mostra os detalhes de cada um. |
+| **Diagnóstico** | Agrupa os erros do sistema, explica cada um e repara os que têm reparação possível: serviços falhados, pacotes danificados ou semi-configurados, ligações do systemd quebradas e entradas de arranque órfãs. |
+| **Otimização** | Analisa o hardware e a configuração e propõe desativar serviços de que o computador não precisa (por exemplo, impressão sem impressora). Aplica a seleção toda de uma vez. |
+| **Memória** | Gestão de swap, zram e zswap, com um modo automático que deteta a RAM e o tipo de armazenamento, e opção de repor os valores originais. |
+| **Análise de arranque** | Tempo total e fases do arranque, unidades mais lentas, cadeia crítica, temporizadores frequentes e histórico dos últimos arranques. |
+| **Histórico** | Registo das alterações feitas pela aplicação, com a opção de desfazer. |
 
+
+## Segurança
+ 
+- As alterações ao sistema passam por um único programa auxiliar, autenticado com o **pkexec**. Uma só palavra-passe cobre todo o lote de ações.
+- Os serviços essenciais do sistema (por exemplo `dbus`, `systemd-*`, gestores de sessão e `NetworkManager`) estão **protegidos**: não podem ser parados, reiniciados nem desativados.
+- Antes de qualquer reparação ou otimização, a aplicação mostra o que vai ser alterado e pede confirmação.
+- As ações de reparação com o `apt` (reinstalar pacotes) precisam dos repositórios do sistema.
+## Idiomas
+ 
+Português (Portugal), Português (Brasil), Inglês, Espanhol e Francês. O idioma do sistema é detetado automaticamente. Se o sistema estiver noutro idioma, a aplicação usa Inglês.
+ 
 ## Requisitos
-
-- Linux com **systemd** e **polkit** (`pkexec`)
+ 
+- Linux com **systemd**
 - Python 3.10 ou superior
 - PySide6 ou PyQt5
-- Recomendados: `wmctrl`, `fonts-lato`
-
+- pkexec (polkit)
 ## Instalação
-
-Descarrega o ficheiro `.deb` mais recente na página de [Releases](../../releases) e instala:
-
+ 
+Descarregue o ficheiro `.deb` da página de [Releases](../../releases) e instale:
+ 
 ```bash
-sudo apt install ./mainuan-otimizador_1_1_2.deb
+sudo apt install ./mainuan-otimizador_2_0.deb
 ```
-
-Depois abre **MAINUAN OTIMIZADOR** no menu de aplicações, ou executa no terminal:
-
+ 
+Depois abra a aplicação pelo menu de aplicações (MAINUAN OTIMIZADOR) ou pelo terminal:
+ 
 ```bash
 mainuan-otimizador
 ```
-
-## Compilar o pacote a partir do código
-
+ 
+## Remover
+ 
 ```bash
-git clone https://github.com/mainuan/mainuan-otimizador.git
-cd mainuan-otimizador
-dpkg-deb --root-owner-group --build package mainuan-otimizador_1_1_2.deb
+sudo apt remove mainuan-otimizador
 ```
-
+ 
+Para remover também a configuração e a swap criada pela aplicação:
+ 
+```bash
+sudo apt purge mainuan-otimizador
+```
+ 
+## Compilar o pacote a partir do código
+ 
+A pasta `package/` contém a árvore do pacote Debian. Para gerar o `.deb`:
+ 
+```bash
+dpkg-deb --build --root-owner-group package mainuan-otimizador_2_0.deb
+```
+ 
 ## Estrutura do projeto
-
-```text
-mainuan-otimizador/
-├── package/
-│   ├── DEBIAN/              # control, postinst, prerm, postrm
-│   └── usr/
-│       ├── bin/             # executável de arranque
-│       ├── lib/mainuan-otimizador/   # código Python (app, core, helper, i18n...)
-│       ├── lib/systemd/system/       # serviço que reaplica a configuração de memória
-│       └── share/           # .desktop, ícones, política polkit, copyright
-├── assets/screenshots/
-├── CHANGELOG.md
-├── LICENSE
-└── README.md
+ 
+```
+assets/screenshots/   capturas de ecrã
+package/DEBIAN/       metadados e scripts do pacote
+package/usr/          aplicação, ícones, atalho, serviço systemd e política polkit
+CHANGELOG.md          histórico de versões
+LICENSE               licença GPL-3.0
 ```
 
 ## Licença
@@ -87,7 +112,7 @@ Distribuído sob a licença **GPL-3.0 ou posterior**. Vê o ficheiro [LICENSE](L
 
 GPL-3.0 - See [LICENSE](LICENSE)
 
-## 🆕 Nova Versão 1.1.2 (18 Novembro 2026)
+## Versão 1.1.2 (18 Novembro 2026)
 
 ## Contribuição
 

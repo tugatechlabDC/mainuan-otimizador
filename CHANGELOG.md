@@ -4,6 +4,19 @@ Todas as alterações relevantes deste projeto são registadas neste ficheiro.
 
 O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-PT/1.1.0/).
 
+## [2.0] - 2026-11-26
+### Novo
+- Menus Resumo, Serviços, Diagnóstico, Otimização, Análise de arranque e Histórico.
+- Gestão de serviços systemd com confirmação e uma só palavra-passe por lote.
+- Diagnóstico com reparação de erros do sistema.
+- Histórico de alterações com opção de desfazer.
+- Aviso "Por favor aguarde" durante as leituras do sistema.
+### Alterado
+- Menu Memória (swap, zram, zswap) mantido.
+- Idioma detetado automaticamente: pt-PT, pt-BR, en, es, fr (outros idiomas usam inglês).
+### Removido
+- Menus Painel, Otimizador, Arranque e Processos.
+
 ## 🎉 Lançamento inicial --> [1.1.2] - 2026-11-19
 
 ### Estado da versão

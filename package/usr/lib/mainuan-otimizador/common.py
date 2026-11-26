@@ -11,7 +11,7 @@ from i18n import _
 
 APP_NAME = "MAINUAN OTIMIZADOR"
 APP_ID = "mainuan-otimizador"
-VERSION = "1.1.2"
+VERSION = "2.0"
 AUTHOR = "David Caixinha"
 
 CONFIG_DIR = "/etc/mainuan-otimizador"
