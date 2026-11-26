@@ -61,7 +61,7 @@ Português (Portugal), Português (Brasil), Inglês, Espanhol e Francês. O idio
 Descarregue o ficheiro `.deb` da página de [Releases](../../releases) e instale:
  
 ```bash
-sudo apt install ./mainuan-otimizador_2_0.deb
+sudo apt install ./mainuan-otimizador_2.0_amd64.deb
 ```
  
 Depois abra a aplicação pelo menu de aplicações (MAINUAN OTIMIZADOR) ou pelo terminal:
