@@ -25,7 +25,7 @@ Aplicação para Linux (Ubuntu, Debian e derivados) que reúne num só sítio o 
   <img src="assets/screenshots/screenshot8.png" width="24%">
 </div>
 
-## 🆕 Nova Versão: 2.0** - 2026-11-26
+## 🆕 Nova Versão: 2.0 - 2026-11-26
 
 ## Funcionalidades
 
