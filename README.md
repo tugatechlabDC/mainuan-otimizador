@@ -4,7 +4,7 @@
 
 # MAINUAN OTIMIZADOR
 
-![Versão](https://img.shields.io/badge/versão-1.1.2-0fb5c4)
+![Versão](https://img.shields.io/badge/versão-2.0-0fb5c4)
 ![Licença](https://img.shields.io/badge/licença-GPL--3.0--or--later-blue)
 ![Plataforma](https://img.shields.io/badge/plataforma-Linux-lightgrey)
 
@@ -25,7 +25,7 @@ Aplicação para Linux (Ubuntu, Debian e derivados) que reúne num só sítio o 
   <img src="assets/screenshots/screenshot8.png" width="24%">
 </div>
 
-** 🆕 Nova Versão: 2.0** - 2026-11-26
+## 🆕 Nova Versão: 2.0** - 2026-11-26
 
 ## Funcionalidades
 
